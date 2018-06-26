@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using Terraria;
 
 
-namespace HamstarHelpers.TmlHelpers.LoadHelpers {
-	public partial class LoadHelpers {
+namespace HamstarHelpers.Services.Promises {
+	public partial class Promises {
 		internal IList<Action> PostModLoadPromises = new List<Action>();
 		internal IList<Action> ModUnloadPromises = new List<Action>();
 		internal IList<Action> WorldLoadOncePromises = new List<Action>();
@@ -24,19 +24,70 @@ namespace HamstarHelpers.TmlHelpers.LoadHelpers {
 		internal bool PostWorldUnloadPromiseConditionsMet = false;
 		internal ISet<string> CustomPromiseConditionsMet = new HashSet<string>();
 
-		internal int StartupDelay = 0;
 
-		internal bool IsClientPlaying = false;
-		internal bool HasServerBegunHavingPlayers = false;
+		////////////////
 
+		internal Promises() {
+			Main.OnTick += Promises._Update;
+		}
+
+		~Promises() {
+			try {
+				Main.OnTick -= Promises._Update;
+
+				if( this.WorldLoadPromiseConditionsMet && !this.WorldUnloadPromiseConditionsMet ) {
+					this.FulfillWorldUnloadPromises();
+					this.FulfillPostWorldUnloadPromises();
+				}
+			} catch { }
+		}
+
+
+		internal void OnPostSetupContent() {
+			Promises.AddWorldLoadEachPromise( () => {
+				this.WorldUnloadPromiseConditionsMet = false;
+				this.PostWorldUnloadPromiseConditionsMet = false;
+			} );
+		}
 
 
 		////////////////
+
+		internal void PreSaveAndExit() {
+			this.FulfillWorldUnloadPromises();
+		}
+
+
+		////////////////
+
+		private static void _Update() { // <- Just in case references are doing something funky...
+			HamstarHelpersMod mymod = HamstarHelpersMod.Instance;
+			if( mymod == null ) { return; }
+
+			mymod.Promises.Update();
+		}
+
+		private void Update() {
+			if( Main.netMode != 2 ) {
+				if( this.WorldLoadPromiseConditionsMet && Main.gameMenu ) {
+					this.WorldLoadPromiseConditionsMet = false; // Does this work?
+				}
+			}
+
+			if( this.WorldUnloadPromiseConditionsMet ) {
+				if( Main.gameMenu && Main.menuMode == 0 ) {
+					this.FulfillPostWorldUnloadPromises();
+				}
+			}
+		}
+
 		
+		////////////////
+
 		internal void FulfillPostModLoadPromises() {
 			if( this.PostModLoadPromiseConditionsMet ) { return; }
 			this.PostModLoadPromiseConditionsMet = true;
-			
+
 			foreach( Action promise in this.PostModLoadPromises ) {
 				promise();
 			}
@@ -54,14 +105,14 @@ namespace HamstarHelpers.TmlHelpers.LoadHelpers {
 		internal void FulfillWorldLoadPromises() {
 			if( this.WorldLoadPromiseConditionsMet ) { return; }
 			this.WorldLoadPromiseConditionsMet = true;
-			
+
 			foreach( Action promise in this.WorldLoadOncePromises ) {
 				promise();
 			}
 			foreach( Action promise in this.WorldLoadEachPromises ) {
 				promise();
 			}
-			
+
 			foreach( Action promise in this.PostWorldLoadOncePromises ) {
 				promise();
 			}
@@ -99,67 +150,6 @@ namespace HamstarHelpers.TmlHelpers.LoadHelpers {
 			}
 
 			this.PostWorldUnloadOncePromises.Clear();
-		}
-
-
-		////////////////
-
-		internal LoadHelpers() {
-			Main.OnTick += LoadHelpers._Update;
-		}
-
-		~LoadHelpers() {
-			try {
-				Main.OnTick -= LoadHelpers._Update;
-
-				if( this.WorldLoadPromiseConditionsMet && !this.WorldUnloadPromiseConditionsMet ) {
-					this.FulfillWorldUnloadPromises();
-					this.FulfillPostWorldUnloadPromises();
-				}
-			} catch { }
-		}
-
-
-		internal void OnPostSetupContent() {
-			LoadHelpers.AddWorldLoadEachPromise( () => {
-				this.WorldUnloadPromiseConditionsMet = false;
-				this.PostWorldUnloadPromiseConditionsMet = false;
-			} );
-		}
-
-
-		////////////////
-
-		internal void PreSaveAndExit() {
-			this.FulfillWorldUnloadPromises();
-		}
-
-
-		////////////////
-
-		private static void _Update() { // <- Just in case references are doing something funky...
-			HamstarHelpersMod mymod = HamstarHelpersMod.Instance;
-			if( mymod == null ) { return; }
-
-			mymod.LoadHelpers.Update();
-		}
-
-		private void Update() {
-			if( Main.netMode != 2 ) {
-				if( this.WorldLoadPromiseConditionsMet && Main.gameMenu ) {
-					this.WorldLoadPromiseConditionsMet = false; // Does this work?
-				}
-			}
-
-			if( this.WorldUnloadPromiseConditionsMet ) {
-				if( Main.gameMenu && Main.menuMode == 0 ) {
-					this.FulfillPostWorldUnloadPromises();
-				}
-			}
-		}
-
-		internal void PostWorldLoadUpdate() {
-			this.StartupDelay++;    // Seems needed for day/night tracking (and possibly other things?)
 		}
 	}
 }
